@@ -27,9 +27,10 @@ jobs:
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
+          rm -rf liquibase /usr/local/bin/liquibase
           tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/liquibase
-          sudo ln -sf /usr/local/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
+          sudo mv liquibase/liquibase /usr/local/bin/liquibase
 
       - name: Download Snowflake JDBC driver
         run: |
