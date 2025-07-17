@@ -21,31 +21,38 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          java-package: jdk
 
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          rm -rf liquibase liquibase.tar.gz /usr/local/bin/liquibase
           tar -xzf liquibase.tar.gz
           chmod +x liquibase/liquibase
           sudo mv liquibase/liquibase /usr/local/bin/liquibase
 
       - name: Verify Liquibase installation
         run: |
-          which liquibase
           liquibase --version
+
+      - name: Configure liquibase.properties file
+        run: |
+          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" > liquibase.properties
+          echo "url=jdbc:snowflake://${{ secrets.SNOWFLAKE_URL }}?warehouse=DEMO_WH&db=DEMO_DB&schema=DEMO_SCHEMA&role=ACCOUNTADMIN" >> liquibase.properties
+          echo "username=${{ secrets.SNOWFLAKE_USER }}" >> liquibase.properties
+          echo "password=${{ secrets.SNOWFLAKE_PASSWORD }}" >> liquibase.properties
+          echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
+          echo "classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar" >> liquibase.properties
+
+      - name: Download Snowflake JDBC driver
+        run: |
+          mkdir -p liquibase-cli/internal/lib
+          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
 
       - name: Dry run DDL/DML + sync changelog (first deploy)
         if: github.event.before == '0000000000000000000000000000000000000000'
         run: |
-          echo "Running dry-run updateSQL"
           liquibase updateSQL
-          echo "Syncing changelog"
           liquibase changelogSync
 
       - name: Run Liquibase update (subsequent commits)
         if: github.event.before != '0000000000000000000000000000000000000000'
-        run: |
-          echo "Applying changes via liquibase update"
-          liquibase update
+        run: liquibase update
