@@ -9,11 +9,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      LIQUIBASE_HOME: /opt/liquibase
-      LIQUIBASE_PROPS_FILE: ./liquibase.properties
-      JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
