@@ -28,38 +28,35 @@ jobs:
       - name: Check if .liquibase-synced exists
         id: check-synced
         run: |
-          if [ -f ".liquibase-synced" ]; then
+          if [ -f .liquibase-synced ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run Liquibase dry-run and sync on first commit only
-        if: ${{ steps.check-synced.outputs.exists == 'false' }}
+      - name: Run dry-run and changelogSync (first commit only)
+        if: steps.check-synced.outputs.exists == 'false'
+        env:
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           cd liquibase-cli && ./liquibase \
-            --url="${{ secrets.SF_URL }}?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }}" \
-            --username="${{ secrets.SF_USER }}" \
-            --password="${{ secrets.SF_PASSWORD }}" \
-            --changeLogFile=../liquibase/changelog/db.changelog.xml \
+            --defaultsFile=../liquibase.properties \
             updateSql
 
           cd liquibase-cli && ./liquibase \
-            --url="${{ secrets.SF_URL }}?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }}" \
-            --username="${{ secrets.SF_USER }}" \
-            --password="${{ secrets.SF_PASSWORD }}" \
-            --changeLogFile=../liquibase/changelog/db.changelog.xml \
+            --defaultsFile=../liquibase.properties \
             changelogSync
 
           echo "Dry-run and changelogSync complete"
           touch .liquibase-synced
 
-      - name: Run Liquibase update after first sync
-        if: ${{ steps.check-synced.outputs.exists == 'true' }}
+      - name: Run actual Liquibase update (future commits)
+        if: steps.check-synced.outputs.exists == 'true'
+        env:
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           cd liquibase-cli && ./liquibase \
-            --url="${{ secrets.SF_URL }}?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }}" \
-            --username="${{ secrets.SF_USER }}" \
-            --password="${{ secrets.SF_PASSWORD }}" \
-            --changeLogFile=../liquibase/changelog/db.changelog.xml \
+            --defaultsFile=../liquibase.properties \
             update
