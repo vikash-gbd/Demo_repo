@@ -1,4 +1,4 @@
-name: Deploy to Snowflake
+name: Deploy to Snowflake via Liquibase
 
 on:
   push:
@@ -10,39 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'        # ✅ REQUIRED FIX
+          distribution: 'temurin'
           java-version: 17
           java-package: jdk
 
       - name: Set up Liquibase
         run: |
+          rm -rf liquibase
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
           tar -xzf liquibase.tar.gz
           sudo mv liquibase /usr/local/bin/liquibase
 
-      - name: Dry Run and Sync Changelog on First Commit
-        if: github.event.head_commit.message == 'INITIAL_COMMIT'
+      - name: Download Snowflake JDBC Driver
+        run: |
+          mkdir -p liquibase-cli/internal/lib
+          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.29/snowflake-jdbc-3.13.29.jar
+
+      - name: Generate SQL output (Dry Run)
         run: |
           liquibase \
-            --defaultsFile=liquibase.properties \
-            updateSql > dryrun_output.sql
+            --defaults-file=liquibase.properties \
+            updateSql > dryrun.sql
+
+      - name: Changelog Sync (mark as executed)
+        run: |
           liquibase \
-            --defaultsFile=liquibase.properties \
+            --defaults-file=liquibase.properties \
             changelogSync
+        if: github.run_number == 1  # Only for first commit
 
-      - name: Run Liquibase Update for Future Commits
-        if: github.event.head_commit.message != 'INITIAL_COMMIT'
+      - name: Apply Changes (from 2nd commit onwards)
         run: |
           liquibase \
-            --defaultsFile=liquibase.properties \
+            --defaults-file=liquibase.properties \
             update
-
-    env:
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        if: github.run_number != 1
