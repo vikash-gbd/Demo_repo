@@ -19,44 +19,38 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and extract Liquibase CLI
+      - name: Download and Extract Liquibase CLI
         run: |
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
           mkdir liquibase-cli
           tar -xzf liquibase.tar.gz -C liquibase-cli
 
-      - name: Check if .liquibase-synced exists
-        id: check-synced
+      - name: Download Snowflake JDBC Driver
         run: |
-          if [ -f .liquibase-synced ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          mkdir -p lib
+          curl -o lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
+
+      - name: Run Liquibase
+        run: |
+          if [ ! -f ".liquibase-synced" ]; then
+            echo "🧪 First run: Running dry-run and changelogSync..."
+
+            cd liquibase-cli && ./liquibase \
+              --defaultsFile=../liquibase.properties \
+              updateSql
+
+            cd liquibase-cli && ./liquibase \
+              --defaultsFile=../liquibase.properties \
+              changelogSync
+
+            echo "✅ Dry-run and changelogSync complete"
+            touch ../.liquibase-synced
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🚀 Running actual Liquibase update..."
+            cd liquibase-cli && ./liquibase \
+              --defaultsFile=../liquibase.properties \
+              update
           fi
-
-      - name: Run dry-run and changelogSync (first commit only)
-        if: steps.check-synced.outputs.exists == 'false'
         env:
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          cd liquibase-cli && ./liquibase \
-            --defaultsFile=../liquibase.properties \
-            updateSql
-
-          cd liquibase-cli && ./liquibase \
-            --defaultsFile=../liquibase.properties \
-            changelogSync
-
-          echo "Dry-run and changelogSync complete"
-          touch .liquibase-synced
-
-      - name: Run actual Liquibase update (future commits)
-        if: steps.check-synced.outputs.exists == 'true'
-        env:
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          cd liquibase-cli && ./liquibase \
-            --defaultsFile=../liquibase.properties \
-            update
+          SNOWFLAKE_USERNAME: ${{ secrets.SF_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SF_PASSWORD }}
