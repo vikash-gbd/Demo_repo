@@ -1,54 +1,48 @@
-name: Deploy to Snowflake via Liquibase
+name: Deploy to Snowflake
 
 on:
   push:
     branches:
       - main
-      - feature/**
 
 jobs:
-  liquibase-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repo
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          java-version: '17'
+          distribution: 'temurin'        # ✅ REQUIRED FIX
+          java-version: 17
+          java-package: jdk
 
-      - name: Download Liquibase
+      - name: Set up Liquibase
         run: |
-          curl -L https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.tar.gz | tar xz
-          mkdir -p liquibase-cli/internal/lib
-          mv liquibase liquibase-cli/
+          curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
+          tar -xzf liquibase.tar.gz
+          sudo mv liquibase /usr/local/bin/liquibase
 
-      - name: Download Snowflake JDBC Driver
+      - name: Dry Run and Sync Changelog on First Commit
+        if: github.event.head_commit.message == 'INITIAL_COMMIT'
         run: |
-          curl -L -o liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
-
-      - name: Run Liquibase updateSQL and changelogSync on first run
-        if: github.ref == 'refs/heads/main' && github.event.before == '0000000000000000000000000000000000000000'
-        run: |
-          liquibase-cli/liquibase \
-            --defaults-file=liquibase.properties \
-            --username=${{ secrets.SNOWFLAKE_USER }} \
-            --password=${{ secrets.SNOWFLAKE_PASSWORD }} \
-            updateSql > dry-run.sql
-
-          liquibase-cli/liquibase \
-            --defaults-file=liquibase.properties \
-            --username=${{ secrets.SNOWFLAKE_USER }} \
-            --password=${{ secrets.SNOWFLAKE_PASSWORD }} \
+          liquibase \
+            --defaultsFile=liquibase.properties \
+            updateSql > dryrun_output.sql
+          liquibase \
+            --defaultsFile=liquibase.properties \
             changelogSync
 
-      - name: Run Liquibase update (for future commits)
-        if: github.ref == 'refs/heads/main' && github.event.before != '0000000000000000000000000000000000000000'
+      - name: Run Liquibase Update for Future Commits
+        if: github.event.head_commit.message != 'INITIAL_COMMIT'
         run: |
-          liquibase-cli/liquibase \
-            --defaults-file=liquibase.properties \
-            --username=${{ secrets.SNOWFLAKE_USER }} \
-            --password=${{ secrets.SNOWFLAKE_PASSWORD }} \
+          liquibase \
+            --defaultsFile=liquibase.properties \
             update
+
+    env:
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
