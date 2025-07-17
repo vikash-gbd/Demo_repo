@@ -48,16 +48,19 @@ jobs:
         run: |
           liquibase --version
 
-      - name: First commit – Dry run and changelogSync
-        if: ${{ !exists('.liquibase-synced') }}
+      - name: Run Liquibase
         run: |
-          echo "First commit detected: Performing dry-run and changelogSync"
-          liquibase updateSQL
-          liquibase changelogSync
-          echo "synced" > .liquibase-synced
-
-      - name: Subsequent commits – Run Liquibase update
-        if: ${{ exists('.liquibase-synced') }}
-        run: |
-          echo "Subsequent commit: Running Liquibase update"
-          liquibase update
+          if [ ! -f ".liquibase-synced" ]; then
+            echo "First-time run: Running updateSQL (dry-run) and changelogSync..."
+            liquibase updateSQL
+            liquibase changelogSync
+            touch .liquibase-synced
+            git config --global user.email "actions@github.com"
+            git config --global user.name "GitHub Actions"
+            git add .liquibase-synced
+            git commit -m "Mark Liquibase changelog as synced"
+            git push
+          else
+            echo "Subsequent run: Applying actual changes..."
+            liquibase update
+          fi
