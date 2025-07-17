@@ -1,4 +1,4 @@
-name: Deploy to Snowflake via Liquibase
+name: Deploy to Snowflake with Liquibase
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Set up Java
@@ -18,35 +18,46 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: 17
+          java-package: jdk
 
       - name: Download Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          mkdir liquibase-dist
-          tar -xzf liquibase.tar.gz -C liquibase-dist --strip-components=1
-          echo "$(pwd)/liquibase-dist" >> $GITHUB_PATH
+          tar -xzf liquibase.tar.gz
+          sudo mv liquibase /usr/local/bin/
+          echo "/usr/local/bin/liquibase" >> $GITHUB_PATH
 
       - name: Download Snowflake JDBC Driver
         run: |
           mkdir -p liquibase-cli/internal/lib
-          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.29/snowflake-jdbc-3.13.29.jar
+          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
 
-      - name: Generate SQL output (Dry Run)
+      - name: Create liquibase.properties
         run: |
-          liquibase \
-            --defaults-file=liquibase.properties \
-            updateSql > dryrun.sql
+          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" > liquibase.properties
+          echo "url=jdbc:snowflake://EQNVJAL-AJB41054.snowflakecomputing.com/?warehouse=DEMO_WH&db=DEMO_DB&schema=DEMO_SCHEMA&role=ACCOUNTADMIN" >> liquibase.properties
+          echo "username=${{ secrets.SNOWFLAKE_USER }}" >> liquibase.properties
+          echo "password=${{ secrets.SNOWFLAKE_PASSWORD }}" >> liquibase.properties
+          echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
+          echo "classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar" >> liquibase.properties
 
-      - name: Changelog Sync (First Commit Only)
+      - name: Detect if this is the first commit
+        id: is_first_commit
         run: |
-          liquibase \
-            --defaults-file=liquibase.properties \
-            changelogSync
-        if: github.run_number == 1
+          count=$(git rev-list --count HEAD)
+          if [ "$count" -eq 1 ]; then
+            echo "result=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Apply Changes (All Future Commits)
+      - name: Run Liquibase updateSql and changelogSync on first commit
+        if: steps.is_first_commit.outputs.result == 'true'
         run: |
-          liquibase \
-            --defaults-file=liquibase.properties \
-            update
-        if: github.run_number != 1
+          liquibase updateSql
+          liquibase changelogSync
+
+      - name: Run Liquibase update on future commits
+        if: steps.is_first_commit.outputs.result != 'true'
+        run: |
+          liquibase update
