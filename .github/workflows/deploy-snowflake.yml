@@ -1,9 +1,8 @@
-name: Deploy to Snowflake using Liquibase
+name: Deploy to Snowflake
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
@@ -11,49 +10,40 @@ jobs:
 
     env:
       LIQUIBASE_PROPS_FILE: ./liquibase.properties
-      LIQUIBASE_HOME: /opt/liquibase
+      SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          mkdir -p $LIQUIBASE_HOME
-          tar -xzf liquibase.tar.gz -C $LIQUIBASE_HOME --strip-components=1
-          echo "$LIQUIBASE_HOME" >> $GITHUB_PATH
+          mkdir -p /opt/liquibase
+          tar -xzf liquibase.tar.gz -C /opt/liquibase --strip-components=1
+          echo "/opt/liquibase" >> $GITHUB_PATH
+
+      - name: Add Liquibase to PATH
+        run: echo "/opt/liquibase" >> $GITHUB_ENV
 
       - name: Verify Liquibase installation
         run: |
+          export PATH=$PATH:/opt/liquibase
           liquibase --version
 
-      - name: Download Snowflake JDBC driver
+      - name: Dry-run: Generate SQL
         run: |
-          mkdir -p liquibase-cli/internal/lib
-          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
+          export PATH=$PATH:/opt/liquibase
+          liquibase updateSql
 
-      - name: Configure Liquibase properties
+      - name: Mark as Executed
         run: |
-          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" > liquibase.properties
-          echo "url=jdbc:snowflake://${{ secrets.SNOWFLAKE_URL }}?warehouse=DEMO_WH&db=DEMO_DB&schema=DEMO_SCHEMA&role=ACCOUNTADMIN" >> liquibase.properties
-          echo "username=${{ secrets.SNOWFLAKE_USER }}" >> liquibase.properties
-          echo "password=${{ secrets.SNOWFLAKE_PASSWORD }}" >> liquibase.properties
-          echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
-          echo "classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar" >> liquibase.properties
-
-      - name: Dry run DDL/DML + sync changelog (first deploy only)
-        if: github.event.before == '0000000000000000000000000000000000000000'
-        run: |
-          liquibase updateSQL
+          export PATH=$PATH:/opt/liquibase
           liquibase changelogSync
-
-      - name: Run Liquibase update (subsequent commits)
-        if: github.event.before != '0000000000000000000000000000000000000000'
-        run: liquibase update
