@@ -1,4 +1,4 @@
-name: Deploy to Snowflake with Liquibase
+name: Deploy to Snowflake
 
 on:
   push:
@@ -9,56 +9,52 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      LIQUIBASE_HOME: /opt/liquibase
+      LIQUIBASE_PROPS_FILE: ./liquibase.properties
+      JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Download and Install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          mkdir -p /tmp/liquibase-extract
-          tar -xzf liquibase.tar.gz -C /tmp/liquibase-extract
-          sudo mv /tmp/liquibase-extract/liquibase /usr/local/bin/liquibase
-          chmod +x /usr/local/bin/liquibase
+          mkdir -p /opt/liquibase
+          tar -xzf liquibase.tar.gz -C /opt/liquibase --strip-components=1
+          echo "/opt/liquibase" >> $GITHUB_PATH
 
       - name: Verify Liquibase Installation
         run: liquibase --version
 
-      - name: Set up Liquibase Properties File
+      - name: Check if Liquibase already synced
+        id: check-sync
         run: |
-          echo "url=jdbc:snowflake://EQNVJAL-AJB41054.snowflakecomputing.com" > liquibase.properties
-          echo "username=Ravisingh9471" >> liquibase.properties
-          echo "password=Ravisingh_9471" >> liquibase.properties
-          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" >> liquibase.properties
-          echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
-          echo "classpath=." >> liquibase.properties
-          echo "logLevel=info" >> liquibase.properties
-          echo "defaultSchemaName=PUBLIC" >> liquibase.properties
-          echo "liquibaseProLicenseKey=" >> liquibase.properties
+          if [ -f .liquibase-synced ]; then
+            echo "synced=true" >> $GITHUB_OUTPUT
+          else
+            echo "synced=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: First Commit? Dry-Run and changelogSync
-        if: ${{ !hashFiles('.liquibase-synced') }}
+      - name: Dry Run and Sync (First Time Only)
+        if: steps.check-sync.outputs.synced == 'false'
         run: |
-          echo "Running dry-run SQL (updateSql)"
           liquibase updateSql
-          echo "Syncing changelogs to DB"
           liquibase changelogSync
-          echo "Marking as synced"
-          echo "synced" > .liquibase-synced
+          touch .liquibase-synced
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           git add .liquibase-synced
           git commit -m "Mark Liquibase as synced"
-          git push
+          git push origin main
 
-      - name: Subsequent Commit? Apply actual changes
-        if: ${{ hashFiles('.liquibase-synced') != '' }}
-        run: |
-          echo "Running liquibase update"
-          liquibase update
+      - name: Apply Changes (From Second Commit Onwards)
+        if: steps.check-sync.outputs.synced == 'true'
+        run: liquibase update
