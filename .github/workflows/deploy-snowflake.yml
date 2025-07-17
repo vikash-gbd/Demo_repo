@@ -27,8 +27,11 @@ jobs:
         run: |
           curl -sL https://github.com/liquibase/liquibase/releases/latest/download/liquibase.zip -o liquibase.zip
           unzip liquibase.zip -d liquibase
-          sudo mv liquibase /usr/local/liquibase
-          echo "/usr/local/liquibase" >> $GITHUB_PATH
+          sudo mv liquibase /usr/local/bin/liquibase
+          sudo chmod +x /usr/local/bin/liquibase
+
+      - name: Show Liquibase version
+        run: liquibase --version
 
       - name: Dry-run: Generate SQL
         run: liquibase updateSql
