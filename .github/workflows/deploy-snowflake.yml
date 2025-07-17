@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      LIQUIBASE_HOME: /usr/local/liquibase
       LIQUIBASE_PROPS_FILE: ./liquibase.properties
 
     steps:
@@ -27,42 +26,26 @@ jobs:
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          rm -rf liquibase /usr/local/bin/liquibase
+          rm -rf liquibase liquibase.tar.gz /usr/local/bin/liquibase
           tar -xzf liquibase.tar.gz
           chmod +x liquibase/liquibase
           sudo mv liquibase/liquibase /usr/local/bin/liquibase
-
-      - name: Download Snowflake JDBC driver
-        run: |
-          mkdir -p liquibase-cli/internal/lib
-          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar \
-            https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
-
-      - name: Configure Liquibase properties
-        run: |
-          cat <<EOF > liquibase.properties
-          driver=net.snowflake.client.jdbc.SnowflakeDriver
-          url=jdbc:snowflake://${{ secrets.SNOWFLAKE_URL }}?warehouse=${{ secrets.SNOWFLAKE_WAREHOUSE }}&db=${{ secrets.SNOWFLAKE_DB }}&schema=${{ secrets.SNOWFLAKE_SCHEMA }}&role=${{ secrets.SNOWFLAKE_ROLE }}
-          username=${{ secrets.SNOWFLAKE_USER }}
-          password=${{ secrets.SNOWFLAKE_PASSWORD }}
-          changeLogFile=liquibase/changelog/liquibase-master.xml
-          classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar
-          EOF
 
       - name: Verify Liquibase installation
         run: |
           which liquibase
           liquibase --version
 
-      - name: Dry run DDL/DML + sync changelog (first commit)
+      - name: Dry run DDL/DML + sync changelog (first deploy)
         if: github.event.before == '0000000000000000000000000000000000000000'
         run: |
-          echo "Dry-run mode — generating SQL only"
+          echo "Running dry-run updateSQL"
           liquibase updateSQL
+          echo "Syncing changelog"
           liquibase changelogSync
 
       - name: Run Liquibase update (subsequent commits)
         if: github.event.before != '0000000000000000000000000000000000000000'
         run: |
-          echo "Applying changes to Snowflake"
+          echo "Applying changes via liquibase update"
           liquibase update
