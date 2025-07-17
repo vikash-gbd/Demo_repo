@@ -25,9 +25,11 @@ jobs:
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          tar -xzf liquibase.tar.gz
-          chmod +x liquibase/liquibase
-          sudo mv liquibase/liquibase /usr/local/bin/liquibase
+          rm -rf liquibase  # Remove if already extracted
+          mkdir liquibase-extract
+          tar -xzf liquibase.tar.gz -C liquibase-extract
+          sudo mv liquibase-extract/liquibase /usr/local/bin/liquibase
+          sudo chmod +x /usr/local/bin/liquibase
 
       - name: Verify Liquibase installation
         run: |
