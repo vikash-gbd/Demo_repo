@@ -27,8 +27,8 @@ jobs:
         run: |
           curl -L https://github.com/liquibase/liquibase/releases/latest/download/liquibase-4.27.0.tar.gz -o liquibase.tar.gz
           tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/bin/liquibase
-          chmod +x /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
+          sudo mv liquibase/liquibase /usr/local/bin/liquibase
 
       - name: Check Liquibase version
         run: liquibase --version
