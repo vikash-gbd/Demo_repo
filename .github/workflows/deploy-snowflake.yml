@@ -11,6 +11,7 @@ jobs:
 
     env:
       LIQUIBASE_PROPS_FILE: ./liquibase.properties
+      LIQUIBASE_HOME: /opt/liquibase
 
     steps:
       - name: Checkout code
@@ -25,17 +26,20 @@ jobs:
       - name: Download and install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          rm -rf liquibase  # Remove if already extracted
-          mkdir liquibase-extract
-          tar -xzf liquibase.tar.gz -C liquibase-extract
-          sudo mv liquibase-extract/liquibase /usr/local/bin/liquibase
-          sudo chmod +x /usr/local/bin/liquibase
+          mkdir -p $LIQUIBASE_HOME
+          tar -xzf liquibase.tar.gz -C $LIQUIBASE_HOME --strip-components=1
+          echo "$LIQUIBASE_HOME" >> $GITHUB_PATH
 
       - name: Verify Liquibase installation
         run: |
           liquibase --version
 
-      - name: Configure liquibase.properties file
+      - name: Download Snowflake JDBC driver
+        run: |
+          mkdir -p liquibase-cli/internal/lib
+          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
+
+      - name: Configure Liquibase properties
         run: |
           echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" > liquibase.properties
           echo "url=jdbc:snowflake://${{ secrets.SNOWFLAKE_URL }}?warehouse=DEMO_WH&db=DEMO_DB&schema=DEMO_SCHEMA&role=ACCOUNTADMIN" >> liquibase.properties
@@ -44,12 +48,7 @@ jobs:
           echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
           echo "classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar" >> liquibase.properties
 
-      - name: Download Snowflake JDBC driver
-        run: |
-          mkdir -p liquibase-cli/internal/lib
-          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
-
-      - name: Dry run DDL/DML + sync changelog (first deploy)
+      - name: Dry run DDL/DML + sync changelog (first deploy only)
         if: github.event.before == '0000000000000000000000000000000000000000'
         run: |
           liquibase updateSQL
