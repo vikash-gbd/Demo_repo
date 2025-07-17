@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
       - name: Set up Java
@@ -18,14 +18,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: 17
-          java-package: jdk
 
-      - name: Set up Liquibase
+      - name: Download Liquibase
         run: |
-          rm -rf liquibase
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/bin/liquibase
+          mkdir liquibase-dist
+          tar -xzf liquibase.tar.gz -C liquibase-dist --strip-components=1
+          echo "$(pwd)/liquibase-dist" >> $GITHUB_PATH
 
       - name: Download Snowflake JDBC Driver
         run: |
@@ -38,14 +37,14 @@ jobs:
             --defaults-file=liquibase.properties \
             updateSql > dryrun.sql
 
-      - name: Changelog Sync (mark as executed)
+      - name: Changelog Sync (First Commit Only)
         run: |
           liquibase \
             --defaults-file=liquibase.properties \
             changelogSync
-        if: github.run_number == 1  # Only for first commit
+        if: github.run_number == 1
 
-      - name: Apply Changes (from 2nd commit onwards)
+      - name: Apply Changes (All Future Commits)
         run: |
           liquibase \
             --defaults-file=liquibase.properties \
