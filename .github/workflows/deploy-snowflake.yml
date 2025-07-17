@@ -23,16 +23,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Download and Extract Liquibase
+      - name: Install Liquibase CLI
         run: |
           curl -L https://github.com/liquibase/liquibase/releases/latest/download/liquibase-4.27.0.tar.gz -o liquibase.tar.gz
           tar -xzf liquibase.tar.gz
           sudo mv liquibase /usr/local/liquibase
+          echo "/usr/local/liquibase" >> $GITHUB_ENV
 
-      - name: Add Liquibase to PATH
-        run: echo "/usr/local/liquibase" >> $GITHUB_ENV
-
-      - name: Check Liquibase Version
+      - name: Check Liquibase version
         run: /usr/local/liquibase/liquibase --version
 
       - name: Dry-run: Generate SQL
