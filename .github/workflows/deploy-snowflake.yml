@@ -28,9 +28,7 @@ jobs:
           curl -sL https://github.com/liquibase/liquibase/releases/latest/download/liquibase.zip -o liquibase.zip
           unzip liquibase.zip -d liquibase
           sudo mv liquibase /usr/local/liquibase
-
-      - name: Add Liquibase to PATH
-        run: echo "/usr/local/liquibase" >> $GITHUB_PATH
+          echo "/usr/local/liquibase" >> $GITHUB_PATH
 
       - name: Dry-run: Generate SQL
         run: liquibase updateSql
