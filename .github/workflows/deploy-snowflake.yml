@@ -1,4 +1,4 @@
-name: Deploy to Snowflake using Liquibase
+name: Deploy to Snowflake with Liquibase
 
 on:
   push:
@@ -9,58 +9,56 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      LIQUIBASE_HOME: /usr/local/liquibase
-      LIQUIBASE_PROPS_FILE: ./liquibase.properties
-
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: 17
 
-      - name: Download and install Liquibase
+      - name: Download and Install Liquibase
         run: |
           curl -Lo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.25.1/liquibase-4.25.1.tar.gz
-          tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/liquibase
-          sudo ln -sf /usr/local/liquibase/liquibase /usr/local/bin/liquibase
+          mkdir -p /tmp/liquibase-extract
+          tar -xzf liquibase.tar.gz -C /tmp/liquibase-extract
+          sudo mv /tmp/liquibase-extract/liquibase /usr/local/bin/liquibase
+          chmod +x /usr/local/bin/liquibase
 
-      - name: Download Snowflake JDBC driver
-        run: |
-          mkdir -p liquibase-cli/internal/lib
-          curl -Lo liquibase-cli/internal/lib/snowflake-jdbc.jar https://repo1.maven.org/maven2/net/snowflake/snowflake-jdbc/3.13.30/snowflake-jdbc-3.13.30.jar
+      - name: Verify Liquibase Installation
+        run: liquibase --version
 
-      - name: Configure Liquibase properties
+      - name: Set up Liquibase Properties File
         run: |
-          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" > liquibase.properties
-          echo "url=jdbc:snowflake://${{ secrets.SNOWFLAKE_URL }}?warehouse=DEMO_WH&db=DEMO_DB&schema=DEMO_SCHEMA&role=ACCOUNTADMIN" >> liquibase.properties
-          echo "username=${{ secrets.SNOWFLAKE_USER }}" >> liquibase.properties
-          echo "password=${{ secrets.SNOWFLAKE_PASSWORD }}" >> liquibase.properties
+          echo "url=jdbc:snowflake://EQNVJAL-AJB41054.snowflakecomputing.com" > liquibase.properties
+          echo "username=Ravisingh9471" >> liquibase.properties
+          echo "password=Ravisingh_9471" >> liquibase.properties
+          echo "driver=net.snowflake.client.jdbc.SnowflakeDriver" >> liquibase.properties
           echo "changeLogFile=liquibase/changelog/liquibase-master.xml" >> liquibase.properties
-          echo "classpath=liquibase-cli/internal/lib/snowflake-jdbc.jar" >> liquibase.properties
+          echo "classpath=." >> liquibase.properties
+          echo "logLevel=info" >> liquibase.properties
+          echo "defaultSchemaName=PUBLIC" >> liquibase.properties
+          echo "liquibaseProLicenseKey=" >> liquibase.properties
 
-      - name: Verify Liquibase installation
+      - name: First Commit? Dry-Run and changelogSync
+        if: ${{ !hashFiles('.liquibase-synced') }}
         run: |
-          liquibase --version
+          echo "Running dry-run SQL (updateSql)"
+          liquibase updateSql
+          echo "Syncing changelogs to DB"
+          liquibase changelogSync
+          echo "Marking as synced"
+          echo "synced" > .liquibase-synced
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add .liquibase-synced
+          git commit -m "Mark Liquibase as synced"
+          git push
 
-      - name: Run Liquibase
+      - name: Subsequent Commit? Apply actual changes
+        if: ${{ hashFiles('.liquibase-synced') != '' }}
         run: |
-          if [ ! -f ".liquibase-synced" ]; then
-            echo "First-time run: Running updateSQL (dry-run) and changelogSync..."
-            liquibase updateSQL
-            liquibase changelogSync
-            touch .liquibase-synced
-            git config --global user.email "actions@github.com"
-            git config --global user.name "GitHub Actions"
-            git add .liquibase-synced
-            git commit -m "Mark Liquibase changelog as synced"
-            git push
-          else
-            echo "Subsequent run: Applying actual changes..."
-            liquibase update
-          fi
+          echo "Running liquibase update"
+          liquibase update
