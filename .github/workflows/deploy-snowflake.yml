@@ -27,14 +27,13 @@ jobs:
         run: |
           curl -L https://github.com/liquibase/liquibase/releases/latest/download/liquibase-4.27.0.tar.gz -o liquibase.tar.gz
           tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/liquibase
-          echo "/usr/local/liquibase" >> $GITHUB_ENV
+          sudo mv liquibase*/liquibase /usr/local/bin/liquibase
 
       - name: Check Liquibase version
-        run: /usr/local/liquibase/liquibase --version
+        run: liquibase --version
 
       - name: Dry-run: Generate SQL
-        run: /usr/local/liquibase/liquibase updateSql
+        run: liquibase updateSql
 
       - name: Mark as Executed
-        run: /usr/local/liquibase/liquibase changelogSync
+        run: liquibase changelogSync
