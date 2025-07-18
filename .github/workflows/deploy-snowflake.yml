@@ -29,10 +29,9 @@ jobs:
         run: |
           mkdir -p liquibase-cli
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
-            | tar --strip-components=1 -xz -C liquibase-cli
-          chmod +x liquibase-cli/liquibase
+            | tar -xz -C liquibase-cli
 
-      - name: 🔧 Configure liquibase.properties with secrets
+      - name: 🔧 Replace placeholders in liquibase.properties
         run: |
           sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
           sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
@@ -44,8 +43,8 @@ jobs:
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
-            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties updateSql && \
-            ./liquibase --defaultsFile=../liquibase.properties changelogSync && cd ..
+            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties updateSql
+            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties changelogSync
             touch .liquibase-synced
 
             git config user.name "github-actions[bot]"
@@ -55,5 +54,5 @@ jobs:
             git push
           else
             echo "🚀 Subsequent run: running liquibase update"
-            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
+            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties update
           fi
