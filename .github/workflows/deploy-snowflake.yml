@@ -1,4 +1,4 @@
-name: Deploy to Snowflake via Liquibase
+name: Liquibase Deploy to Snowflake
 
 on:
   push:
@@ -6,62 +6,44 @@ on:
       - main
 
 jobs:
-  liquibase-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
-      - name: Download Liquibase CLI
+      - name: Download and Extract Liquibase CLI
         run: |
           rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
           tar -xzf liquibase.tar.gz
           mkdir -p liquibase-cli
-          mv liquibase-4.24.0/bin/* liquibase-cli/
+          mv liquibase-4.24.0/* liquibase-cli/
           chmod +x liquibase-cli/liquibase
-          rm -rf liquibase-4.24.0 liquibase.tar.gz
+          rm -rf liquibase.tar.gz liquibase-4.24.0
 
-      - name: Check if first deployment
-        id: check-init
+      - name: Run Liquibase Dry Run and Sync if First Deploy
+        if: "!contains(github.event.head_commit.message, '[deploy]')"  # only first time
         run: |
-          if git ls-remote --exit-code origin refs/heads/liquibase-initialized > /dev/null; then
-            echo "first_run=false" >> $GITHUB_OUTPUT
-          else
-            echo "first_run=true" >> $GITHUB_OUTPUT
-          fi
+          ./liquibase-cli/liquibase \
+            --defaultsFile=liquibase/liquibase.properties \
+            updateSql > dryrun.sql
 
-      - name: Run Liquibase (initial dry run + sync or real update)
+          ./liquibase-cli/liquibase \
+            --defaultsFile=liquibase/liquibase.properties \
+            changelogSync
+
+      - name: Run Liquibase Update for All Future Pushes
+        if: "contains(github.event.head_commit.message, '[deploy]')"  # must add [deploy] in commit msg
         run: |
-          export LIQUIBASE_CMD="./liquibase-cli/liquibase \
-            --url=jdbc:snowflake://${{ secrets.SF_URL }}?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }} \
-            --username=${{ secrets.SF_USER }} \
-            --password=${{ secrets.SF_PASSWORD }} \
-            --changeLogFile=liquibase/changelog/db.changelog.xml"
+          ./liquibase-cli/liquibase \
+            --defaultsFile=liquibase/liquibase.properties \
+            update
 
-          if [[ "${{ steps.check-init.outputs.first_run }}" == "true" ]]; then
-            echo "🔍 First deployment: running updateSql + changelogSync"
-            $LIQUIBASE_CMD updateSql
-            $LIQUIBASE_CMD changelogSync
-          else
-            echo "🚀 Running real update"
-            $LIQUIBASE_CMD update
-          fi
-
-      - name: Mark initialization complete (only if first run)
-        if: steps.check-init.outputs.first_run == 'true'
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git checkout -b liquibase-initialized
-          touch .liquibase-initialized
-          git add .liquibase-initialized
-          git commit -m "Initial Liquibase sync done"
-          git push origin liquibase-initialized

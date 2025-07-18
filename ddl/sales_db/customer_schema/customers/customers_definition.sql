@@ -1,10 +1,13 @@
-CREATE OR REPLACE TABLE sales_db.customer_schema.customers (
+USE DATABASE sales_db;
+USE SCHEMA customer_schema;
+
+CREATE OR REPLACE TABLE customers (
     customer_id INT,
     name STRING,
     email STRING
 );
 
-INSERT INTO sales_db.customer_schema.customers (customer_id, name, email)
+INSERT INTO customers (customer_id, name, email)
 VALUES
     (1, 'Alice', 'alice@example.com'),
     (2, 'Bob', 'bob@example.com');
