@@ -32,17 +32,18 @@ jobs:
       - name: 🚀 Run Liquibase
         run: |
           if [ ! -f ".liquibase-synced" ]; then
-            echo "🧪 First run: updateSql + changelogSync"
+            echo "🧪 First-time run: dry-run + changelogSync"
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties updateSql
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties changelogSync
+            cd ..
             touch .liquibase-synced
 
-            # Commit the .liquibase-synced file to the repo to prevent reruns
+            # Commit .liquibase-synced to repo so future runs skip dry-run
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add .liquibase-synced
-            git commit -m "🔒 Marked Liquibase as synced (initial dry-run complete)"
+            git commit -m "🔒 Marked Liquibase as synced (dry-run complete)"
             git push
           else
-            echo "🚀 Subsequent run: running full update"
+            echo "🚀 Subsequent run: running liquibase update"
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
