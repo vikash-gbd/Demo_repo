@@ -28,10 +28,11 @@ jobs:
 
       - name: Download and Extract Liquibase CLI
         run: |
-          rm -rf liquibase liquibase-cli liquibase-4.24.0.tar.gz
+          rm -rf liquibase-cli liquibase.tar.gz
           mkdir -p liquibase-cli
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
+          tar -xzf liquibase.tar.gz
+          mv liquibase-4.24.0/* liquibase-cli/
           chmod +x liquibase-cli/liquibase
 
       - name: Replace placeholders in liquibase.properties
@@ -42,11 +43,6 @@ jobs:
           sed -i "s|__SNOWFLAKE_ROLE__|${SNOWFLAKE_ROLE}|g" liquibase.properties
           sed -i "s|__SNOWFLAKE_WAREHOUSE__|${SNOWFLAKE_WAREHOUSE}|g" liquibase.properties
 
-      - name: Run Liquibase updateSql (dry-run)
+      - name: Run Liquibase updateSql
         run: |
           liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql
-
-      # Optional actual update if you want
-      # - name: Run Liquibase update
-      #   run: |
-      #     liquibase-cli/liquibase --defaultsFile=liquibase.properties update
