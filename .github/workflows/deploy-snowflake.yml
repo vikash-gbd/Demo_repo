@@ -26,10 +26,11 @@ jobs:
           java-version: 17
           distribution: temurin
 
-      - name: 📦 Download Liquibase CLI
+      - name: 📦 Download and extract Liquibase CLI
         run: |
-          mkdir -p liquibase-cli
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz | tar xz -C liquibase-cli --strip-components=1
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          mkdir liquibase-cli
+          tar -xzf liquibase.tar.gz -C liquibase-cli
           chmod +x liquibase-cli/liquibase
 
       - name: 🔧 Replace variables in liquibase.properties
