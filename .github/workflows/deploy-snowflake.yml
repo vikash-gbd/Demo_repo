@@ -1,47 +1,47 @@
-name: Deploy to Snowflake via Liquibase
+name: 🚀 Deploy to Snowflake with Liquibase
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  liquibase-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
       SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
 
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v3
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
       - name: ☕ Set up Java 17
         uses: actions/setup-java@v3
         with:
-          java-version: 17
           distribution: temurin
+          java-version: 17
 
       - name: 📦 Download Liquibase CLI
         run: |
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          mkdir liquibase-cli
-          tar -xzf liquibase.tar.gz -C liquibase-cli
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz | tar xz
+          mv liquibase liquibase-cli
+          chmod +x liquibase-cli/liquibase
 
-      - name: 🛠️ Generate liquibase.properties from template
+      - name: 🧪 Prepare liquibase.properties (replace placeholders)
         run: |
+          mv liquibase.properties liquibase.properties.template
           cp liquibase.properties.template liquibase.properties
-          sed -i "s/__SNOWFLAKE_ACCOUNT__/$SNOWFLAKE_ACCOUNT/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_WAREHOUSE__/$SNOWFLAKE_WAREHOUSE/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_ROLE__/$SNOWFLAKE_ROLE/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_USERNAME__/$SNOWFLAKE_USERNAME/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_PASSWORD__/$SNOWFLAKE_PASSWORD/g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ROLE__|$SNOWFLAKE_ROLE|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_USERNAME__|$SNOWFLAKE_USERNAME|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_PASSWORD__|$SNOWFLAKE_PASSWORD|g" liquibase.properties
 
-      - name: 🚀 Run Liquibase Deployment
+      - name: 🚀 Run Liquibase
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
@@ -49,8 +49,8 @@ jobs:
             ./liquibase --defaultsFile=../liquibase.properties updateSql
             ./liquibase --defaultsFile=../liquibase.properties changelogSync
             cd ..
-            touch .liquibase-synced
 
+            touch .liquibase-synced
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add .liquibase-synced
