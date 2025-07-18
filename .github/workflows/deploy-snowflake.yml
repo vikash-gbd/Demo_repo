@@ -10,35 +10,36 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
+      JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
       SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
-      JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
 
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
-          distribution: temurin
           java-version: 17
+          distribution: temurin
 
-      - name: Download and Extract Liquibase CLI
+      - name: Download and Install Liquibase CLI
         run: |
-          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
-          mkdir -p liquibase-cli
+          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0 liquibase-tmp
+          mkdir -p liquibase-tmp
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          tar -xzf liquibase.tar.gz
-          mv liquibase-4.24.0/* liquibase-cli/
-          rm -rf liquibase-4.24.0 liquibase.tar.gz
+          tar -xzf liquibase.tar.gz -C liquibase-tmp
+          mkdir -p liquibase-cli
+          mv liquibase-tmp/liquibase-4.24.0/* liquibase-cli/
+          rm -rf liquibase.tar.gz liquibase-tmp
           chmod +x liquibase-cli/liquibase
 
-      - name: Replace secrets in liquibase.properties
+      - name: Replace Variables in liquibase.properties
         run: |
           sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
           sed -i "s|__SNOWFLAKE_USERNAME__|$SNOWFLAKE_USERNAME|g" liquibase.properties
@@ -46,6 +47,13 @@ jobs:
           sed -i "s|__SNOWFLAKE_ROLE__|$SNOWFLAKE_ROLE|g" liquibase.properties
           sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
 
-      - name: Liquibase Update
+      - name: Run Liquibase Update or UpdateSQL
         run: |
-          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
+          if git rev-list --count HEAD | grep -q "^1$"; then
+            echo "🔍 First commit — running updateSql and changelogSync"
+            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql > dryrun.sql
+            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties changelogSync
+          else
+            echo "🚀 Subsequent commit — running update"
+            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
+          fi
