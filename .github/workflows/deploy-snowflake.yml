@@ -1,4 +1,4 @@
-name: Deploy to Snowflake with Liquibase
+name: Deploy to Snowflake via Liquibase
 
 on:
   push:
@@ -6,54 +6,53 @@ on:
       - main
 
 jobs:
-  deploy:
+  liquibase-deploy:
     runs-on: ubuntu-latest
 
-    env:
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
-      JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.15-6/x64
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-
     steps:
-      - name: Checkout Repo
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          java-version: 17
-          distribution: temurin
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Download and Install Liquibase CLI
+      - name: Download and extract Liquibase CLI
         run: |
-          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0 liquibase-tmp
-          mkdir -p liquibase-tmp
+          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          tar -xzf liquibase.tar.gz -C liquibase-tmp
           mkdir -p liquibase-cli
-          mv liquibase-tmp/liquibase-4.24.0/* liquibase-cli/
-          rm -rf liquibase.tar.gz liquibase-tmp
+          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
+          rm -rf liquibase.tar.gz
           chmod +x liquibase-cli/liquibase
 
-      - name: Replace Variables in liquibase.properties
+      - name: Replace placeholders in liquibase.properties
         run: |
-          sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_USERNAME__|$SNOWFLAKE_USERNAME|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_PASSWORD__|$SNOWFLAKE_PASSWORD|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_ROLE__|$SNOWFLAKE_ROLE|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ACCOUNT__|${{ secrets.SF_URL }}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_WAREHOUSE__|${{ secrets.SF_WAREHOUSE }}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ROLE__|${{ secrets.SF_ROLE }}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_USERNAME__|${{ secrets.SF_USER }}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_PASSWORD__|${{ secrets.SF_PASSWORD }}|g" liquibase.properties
 
-      - name: Run Liquibase Update or UpdateSQL
+      - name: Check if this is first Liquibase deployment
+        id: check-first-deploy
         run: |
-          if git rev-list --count HEAD | grep -q "^1$"; then
-            echo "🔍 First commit — running updateSql and changelogSync"
-            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql > dryrun.sql
-            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties changelogSync
+          if [ ! -f .liquibase-deployed ]; then
+            echo "first=true" >> $GITHUB_OUTPUT
           else
-            echo "🚀 Subsequent commit — running update"
-            ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
+            echo "first=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Dry run SQL and changelogSync (first deployment only)
+        if: steps.check-first-deploy.outputs.first == 'true'
+        run: |
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql > dryrun.sql
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties changelogSync
+          touch .liquibase-deployed
+
+      - name: Actual Liquibase update (subsequent deployments)
+        if: steps.check-first-deploy.outputs.first == 'false'
+        run: |
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
