@@ -1,4 +1,4 @@
-name: ❄️ Deploy to Snowflake via Liquibase
+name: Deploy to Snowflake via Liquibase
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  liquibase-deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -17,37 +17,38 @@ jobs:
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
 
     steps:
-      - name: 📥 Checkout repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: ☕ Set up Java
+      - name: ☕ Set up Java 17
         uses: actions/setup-java@v3
         with:
-          java-version: '17'
+          java-version: 17
+          distribution: temurin
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📦 Download Liquibase CLI
         run: |
-          curl -L https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
           mkdir liquibase-cli
-          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
-          rm liquibase.tar.gz
+          tar -xzf liquibase.tar.gz -C liquibase-cli
 
-      - name: 🧪 Run Liquibase dry-run (updateSql) + changelogSync (only once)
+      - name: 🚀 Run Liquibase Deployment
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties updateSql
-            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties changelogSync
+            ./liquibase --defaultsFile=../liquibase.properties changelogSync
             cd ..
             touch .liquibase-synced
 
-            # Commit the marker so this block never runs again
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git add .liquibase-synced
             git commit -m "🔒 Marked Liquibase as synced (dry-run complete)"
             git push
           else
             echo "🚀 Subsequent run: running liquibase update"
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
-          fi
