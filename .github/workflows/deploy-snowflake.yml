@@ -1,4 +1,4 @@
-name: 🚀 Deploy to Snowflake via Liquibase
+name: 🚀 Deploy to Snowflake using Liquibase
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  liquibase-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -17,23 +17,22 @@ jobs:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
 
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v3
 
-      - name: ☕ Set up Java 17
+      - name: ☕ Setup Java 17
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          java-version: 17
+          distribution: temurin
 
       - name: 📦 Download Liquibase CLI
         run: |
-          rm -rf liquibase liquibase-cli
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz | tar xz
-          mv liquibase liquibase-cli
+          mkdir -p liquibase-cli
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz | tar xz -C liquibase-cli --strip-components=1
           chmod +x liquibase-cli/liquibase
 
-      - name: 🔁 Replace placeholders in liquibase.properties (if needed)
+      - name: 🔧 Replace variables in liquibase.properties
         run: |
           sed -i "s/__SNOWFLAKE_ACCOUNT__/$SNOWFLAKE_ACCOUNT/g" liquibase.properties
           sed -i "s/__SNOWFLAKE_WAREHOUSE__/$SNOWFLAKE_WAREHOUSE/g" liquibase.properties
@@ -41,7 +40,7 @@ jobs:
           sed -i "s/__SNOWFLAKE_USERNAME__/$SNOWFLAKE_USERNAME/g" liquibase.properties
           sed -i "s/__SNOWFLAKE_PASSWORD__/$SNOWFLAKE_PASSWORD/g" liquibase.properties
 
-      - name: ⚙️ Run Liquibase (first-time dry-run or real update)
+      - name: ⚙️ Run Liquibase - First time or update
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
