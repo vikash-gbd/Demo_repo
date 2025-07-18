@@ -1,4 +1,4 @@
-name: Liquibase Deploy to Snowflake
+name: Deploy to Snowflake via Liquibase
 
 on:
   push:
@@ -6,44 +6,60 @@ on:
       - main
 
 jobs:
-  deploy:
+  liquibase-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Download and Extract Liquibase CLI
         run: |
-          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
+          rm -rf liquibase-cli liquibase.tar.gz
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          tar -xzf liquibase.tar.gz
           mkdir -p liquibase-cli
-          mv liquibase-4.24.0/* liquibase-cli/
+          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
           chmod +x liquibase-cli/liquibase
-          rm -rf liquibase.tar.gz liquibase-4.24.0
+          rm -rf liquibase.tar.gz
 
-      - name: Run Liquibase Dry Run and Sync if First Deploy
-        if: "!contains(github.event.head_commit.message, '[deploy]')"  # only first time
+      - name: Setup Liquibase Properties File
+        run: |
+          cat <<EOF > liquibase.properties
+          changeLogFile=liquibase/changelog/db.changelog.xml
+          url=jdbc:snowflake://${{ secrets.SF_URL }}/?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }}
+          username=${{ secrets.SF_USER }}
+          password=${{ secrets.SF_PASSWORD }}
+          outputFile=liquibase/dryrun.sql
+          EOF
+
+      - name: Detect if changelog table exists
+        id: changelog-check
         run: |
           ./liquibase-cli/liquibase \
-            --defaultsFile=liquibase/liquibase.properties \
-            updateSql > dryrun.sql
+            --defaultsFile=liquibase.properties \
+            status --verbose > status.out || true
 
-          ./liquibase-cli/liquibase \
-            --defaultsFile=liquibase/liquibase.properties \
-            changelogSync
+          if grep -q "The DATABASECHANGELOG table does not exist" status.out; then
+            echo "first_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "first_run=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Run Liquibase Update for All Future Pushes
-        if: "contains(github.event.head_commit.message, '[deploy]')"  # must add [deploy] in commit msg
+      - name: First Run - Dry Run and Sync
+        if: steps.changelog-check.outputs.first_run == 'true'
         run: |
-          ./liquibase-cli/liquibase \
-            --defaultsFile=liquibase/liquibase.properties \
-            update
+          echo "Dry run and changelogSync (first run)"
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties changelogSync
 
+      - name: Subsequent Runs - Apply Changes
+        if: steps.changelog-check.outputs.first_run == 'false'
+        run: |
+          echo "Running actual update (subsequent run)"
+          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
