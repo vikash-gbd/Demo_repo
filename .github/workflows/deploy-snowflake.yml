@@ -25,15 +25,21 @@ jobs:
         with:
           java-version: 17
           distribution: temurin
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📦 Download Liquibase CLI
         run: |
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
           mkdir liquibase-cli
           tar -xzf liquibase.tar.gz -C liquibase-cli
+
+      - name: 🛠️ Generate liquibase.properties from template
+        run: |
+          cp liquibase.properties.template liquibase.properties
+          sed -i "s/__SNOWFLAKE_ACCOUNT__/$SNOWFLAKE_ACCOUNT/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_WAREHOUSE__/$SNOWFLAKE_WAREHOUSE/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_ROLE__/$SNOWFLAKE_ROLE/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_USERNAME__/$SNOWFLAKE_USERNAME/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_PASSWORD__/$SNOWFLAKE_PASSWORD/g" liquibase.properties
 
       - name: 🚀 Run Liquibase Deployment
         run: |
