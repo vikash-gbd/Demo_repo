@@ -39,7 +39,8 @@ jobs:
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
-            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties updateSql
+            cd liquibase-cli
+            ./liquibase --defaultsFile=../liquibase.properties updateSql
             ./liquibase --defaultsFile=../liquibase.properties changelogSync
             cd ..
             touch .liquibase-synced
@@ -51,4 +52,6 @@ jobs:
             git push
           else
             echo "🚀 Subsequent run: running liquibase update"
-            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
+            cd liquibase-cli
+            ./liquibase --defaultsFile=../liquibase.properties update
+          fi
