@@ -19,40 +19,49 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and extract Liquibase CLI
+      - name: Download Liquibase CLI
         run: |
           rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          tar -xzf liquibase.tar.gz
           mkdir -p liquibase-cli
-          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
-          rm -rf liquibase.tar.gz
+          mv liquibase-4.24.0/bin/* liquibase-cli/
           chmod +x liquibase-cli/liquibase
+          rm -rf liquibase-4.24.0 liquibase.tar.gz
 
-      - name: Replace placeholders in liquibase.properties
+      - name: Check if first deployment
+        id: check-init
         run: |
-          sed -i "s|__SNOWFLAKE_ACCOUNT__|${{ secrets.SF_URL }}|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_WAREHOUSE__|${{ secrets.SF_WAREHOUSE }}|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_ROLE__|${{ secrets.SF_ROLE }}|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_USERNAME__|${{ secrets.SF_USER }}|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_PASSWORD__|${{ secrets.SF_PASSWORD }}|g" liquibase.properties
-
-      - name: Check if this is first Liquibase deployment
-        id: check-first-deploy
-        run: |
-          if [ ! -f .liquibase-deployed ]; then
-            echo "first=true" >> $GITHUB_OUTPUT
+          if git ls-remote --exit-code origin refs/heads/liquibase-initialized > /dev/null; then
+            echo "first_run=false" >> $GITHUB_OUTPUT
           else
-            echo "first=false" >> $GITHUB_OUTPUT
+            echo "first_run=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Dry run SQL and changelogSync (first deployment only)
-        if: steps.check-first-deploy.outputs.first == 'true'
+      - name: Run Liquibase (initial dry run + sync or real update)
         run: |
-          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql > dryrun.sql
-          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties changelogSync
-          touch .liquibase-deployed
+          export LIQUIBASE_CMD="./liquibase-cli/liquibase \
+            --url=jdbc:snowflake://${{ secrets.SF_URL }}?warehouse=${{ secrets.SF_WAREHOUSE }}&db=${{ secrets.SF_DATABASE }}&schema=${{ secrets.SF_SCHEMA }}&role=${{ secrets.SF_ROLE }} \
+            --username=${{ secrets.SF_USER }} \
+            --password=${{ secrets.SF_PASSWORD }} \
+            --changeLogFile=liquibase/changelog/db.changelog.xml"
 
-      - name: Actual Liquibase update (subsequent deployments)
-        if: steps.check-first-deploy.outputs.first == 'false'
+          if [[ "${{ steps.check-init.outputs.first_run }}" == "true" ]]; then
+            echo "🔍 First deployment: running updateSql + changelogSync"
+            $LIQUIBASE_CMD updateSql
+            $LIQUIBASE_CMD changelogSync
+          else
+            echo "🚀 Running real update"
+            $LIQUIBASE_CMD update
+          fi
+
+      - name: Mark initialization complete (only if first run)
+        if: steps.check-init.outputs.first_run == 'true'
         run: |
-          ./liquibase-cli/liquibase --defaultsFile=liquibase.properties update
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git checkout -b liquibase-initialized
+          touch .liquibase-initialized
+          git add .liquibase-initialized
+          git commit -m "Initial Liquibase sync done"
+          git push origin liquibase-initialized
