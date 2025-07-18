@@ -1,11 +1,12 @@
-name: 🚀 Deploy to Snowflake via Liquibase
+name: Deploy to Snowflake via Liquibase
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
 
 jobs:
-  deploy:
+  liquibase-deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -16,38 +17,36 @@ jobs:
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
 
     steps:
-      - name: 📥 Checkout repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: ☕ Set up Java
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: 📦 Download Liquibase CLI
+      - name: Download and Extract Liquibase CLI
         run: |
-          curl -sLO https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz
-          tar -xzf liquibase-4.24.0.tar.gz
+          rm -rf liquibase liquibase-cli liquibase-4.24.0.tar.gz
+          mkdir -p liquibase-cli
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
+          chmod +x liquibase-cli/liquibase
 
-      - name: 🔧 Replace placeholders in liquibase.properties
+      - name: Replace placeholders in liquibase.properties
         run: |
-          esc() { printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'; }
+          sed -i "s|__SNOWFLAKE_ACCOUNT__|${SNOWFLAKE_ACCOUNT}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_USERNAME__|${SNOWFLAKE_USERNAME}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_PASSWORD__|${SNOWFLAKE_PASSWORD}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ROLE__|${SNOWFLAKE_ROLE}|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_WAREHOUSE__|${SNOWFLAKE_WAREHOUSE}|g" liquibase.properties
 
-          sed -i "s/__SNOWFLAKE_ACCOUNT__/$(esc "$SNOWFLAKE_ACCOUNT")/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_WAREHOUSE__/$(esc "$SNOWFLAKE_WAREHOUSE")/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_ROLE__/$(esc "$SNOWFLAKE_ROLE")/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_USERNAME__/$(esc "$SNOWFLAKE_USERNAME")/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_PASSWORD__/$(esc "$SNOWFLAKE_PASSWORD")/g" liquibase.properties
-
-      - name: 🧪 Run Liquibase updateSql
+      - name: Run Liquibase updateSql (dry-run)
         run: |
-          ./liquibase-4.24.0/liquibase \
-            --defaultsFile=liquibase.properties \
-            updateSql
+          liquibase-cli/liquibase --defaultsFile=liquibase.properties updateSql
 
-      - name: ✅ Mark as executed (changelogSync)
-        run: |
-          ./liquibase-4.24.0/liquibase \
-            --defaultsFile=liquibase.properties \
-            changelogSync
+      # Optional actual update if you want
+      # - name: Run Liquibase update
+      #   run: |
+      #     liquibase-cli/liquibase --defaultsFile=liquibase.properties update
