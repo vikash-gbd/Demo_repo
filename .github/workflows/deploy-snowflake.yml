@@ -47,3 +47,4 @@ jobs:
           else
             echo "🚀 Subsequent run: running liquibase update"
             cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
+          fi
