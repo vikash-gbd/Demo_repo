@@ -2,7 +2,9 @@ name: 🚀 Deploy to Snowflake via Liquibase
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
 
 jobs:
   deploy:
@@ -10,49 +12,54 @@ jobs:
 
     env:
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
       SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
 
     steps:
-      - name: ⬇️ Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
       - name: ☕ Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 17
 
-      - name: 📦 Install Liquibase CLI
+      - name: 📦 Download and extract Liquibase CLI
         run: |
           mkdir -p liquibase-cli
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
-            | tar -xz -C liquibase-cli
+            | tar xz -C liquibase-cli --strip-components=1
+          chmod +x liquibase-cli/liquibase
 
       - name: 🔧 Replace placeholders in liquibase.properties
         run: |
-          sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_ROLE__|$SNOWFLAKE_ROLE|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_USERNAME__|$SNOWFLAKE_USERNAME|g" liquibase.properties
-          sed -i "s|__SNOWFLAKE_PASSWORD__|$SNOWFLAKE_PASSWORD|g" liquibase.properties
+          esc() { printf '%s\n' "$1" | sed -e 's/[\/&]/\\&/g'; }
 
-      - name: 🚀 Run Liquibase deployment
+          sed -i "s/__SNOWFLAKE_ACCOUNT__/$(esc "$SNOWFLAKE_ACCOUNT")/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_WAREHOUSE__/$(esc "$SNOWFLAKE_WAREHOUSE")/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_ROLE__/$(esc "$SNOWFLAKE_ROLE")/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_USERNAME__/$(esc "$SNOWFLAKE_USERNAME")/g" liquibase.properties
+          sed -i "s/__SNOWFLAKE_PASSWORD__/$(esc "$SNOWFLAKE_PASSWORD")/g" liquibase.properties
+
+      - name: 📄 Detect if this is first-time deployment
+        id: check
         run: |
-          if [ ! -f ".liquibase-synced" ]; then
-            echo "🧪 First-time run: dry-run + changelogSync"
-            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties updateSql
-            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties changelogSync
-            touch .liquibase-synced
-
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .liquibase-synced
-            git commit -m "🔒 Marked Liquibase as synced (dry-run complete)"
-            git push
+          if [ ! -f liquibase/.liquibase-checksums.md5 ]; then
+            echo "first_time=true" >> $GITHUB_OUTPUT
           else
-            echo "🚀 Subsequent run: running liquibase update"
-            liquibase-cli/liquibase.sh --defaultsFile=liquibase.properties update
+            echo "first_time=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 🧪 Dry run + changelogSync on first commit
+        if: steps.check.outputs.first_time == 'true'
+        run: |
+          liquibase-cli/liquibase updateSql
+          liquibase-cli/liquibase changelogSync
+
+      - name: 🚀 Run Liquibase update (future commits)
+        if: steps.check.outputs.first_time == 'false'
+        run: |
+          liquibase-cli/liquibase update
