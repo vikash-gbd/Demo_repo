@@ -19,15 +19,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and Extract Liquibase CLI
+      - name: Download and Extract Liquibase CLI (idempotent)
         run: |
-          rm -rf liquibase-cli liquibase.tar.gz liquibase-4.24.0
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          tar -xzf liquibase.tar.gz
+          # Ensure clean workspace
+          rm -rf liquibase-cli liquibase.tar.gz
           mkdir -p liquibase-cli
-          mv liquibase-4.24.0/* liquibase-cli/
+          
+          # Download and extract Liquibase CLI
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
+          
+          # Make Liquibase executable
           chmod +x liquibase-cli/bin/liquibase
-          rm -rf liquibase.tar.gz liquibase-4.24.0
+          
+          # Cleanup
+          rm -f liquibase.tar.gz
 
       - name: Set Liquibase Command (first-time dry run or real update)
         id: check-history
