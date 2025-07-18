@@ -2,9 +2,7 @@ name: 🚀 Deploy to Snowflake via Liquibase
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 jobs:
   deploy:
@@ -18,25 +16,23 @@ jobs:
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
 
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout repo
         uses: actions/checkout@v4
 
-      - name: ☕ Set up Java 17
-        uses: actions/setup-java@v3
+      - name: ☕ Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: 📦 Download and extract Liquibase CLI
+      - name: 📦 Download Liquibase CLI
         run: |
-          mkdir -p liquibase-cli
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
-            | tar xz -C liquibase-cli --strip-components=1
-          chmod +x liquibase-cli/liquibase
+          curl -sLO https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz
+          tar -xzf liquibase-4.24.0.tar.gz
 
       - name: 🔧 Replace placeholders in liquibase.properties
         run: |
-          esc() { printf '%s\n' "$1" | sed -e 's/[\/&]/\\&/g'; }
+          esc() { printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'; }
 
           sed -i "s/__SNOWFLAKE_ACCOUNT__/$(esc "$SNOWFLAKE_ACCOUNT")/g" liquibase.properties
           sed -i "s/__SNOWFLAKE_WAREHOUSE__/$(esc "$SNOWFLAKE_WAREHOUSE")/g" liquibase.properties
@@ -44,22 +40,14 @@ jobs:
           sed -i "s/__SNOWFLAKE_USERNAME__/$(esc "$SNOWFLAKE_USERNAME")/g" liquibase.properties
           sed -i "s/__SNOWFLAKE_PASSWORD__/$(esc "$SNOWFLAKE_PASSWORD")/g" liquibase.properties
 
-      - name: 📄 Detect if this is first-time deployment
-        id: check
+      - name: 🧪 Run Liquibase updateSql
         run: |
-          if [ ! -f liquibase/.liquibase-checksums.md5 ]; then
-            echo "first_time=true" >> $GITHUB_OUTPUT
-          else
-            echo "first_time=false" >> $GITHUB_OUTPUT
-          fi
+          ./liquibase-4.24.0/liquibase \
+            --defaultsFile=liquibase.properties \
+            updateSql
 
-      - name: 🧪 Dry run + changelogSync on first commit
-        if: steps.check.outputs.first_time == 'true'
+      - name: ✅ Mark as executed (changelogSync)
         run: |
-          liquibase-cli/liquibase updateSql
-          liquibase-cli/liquibase changelogSync
-
-      - name: 🚀 Run Liquibase update (future commits)
-        if: steps.check.outputs.first_time == 'false'
-        run: |
-          liquibase-cli/liquibase update
+          ./liquibase-4.24.0/liquibase \
+            --defaultsFile=liquibase.properties \
+            changelogSync
