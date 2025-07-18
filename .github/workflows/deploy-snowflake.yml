@@ -9,6 +9,15 @@ jobs:
   liquibase-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      SF_USER: Ravisingh9471
+      SF_PASSWORD: Ravisingh_9471
+      SF_URL: EQNVJAL-AJB41054.snowflakecomputing.com
+      SF_ROLE: ACCOUNTADMIN
+      SF_WAREHOUSE: COMPUTE_WH
+      SF_DATABASE: DEMO_DB
+      SF_SCHEMA: DEMO_SCHEMA
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -19,41 +28,30 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and Extract Liquibase CLI (idempotent)
+      - name: Download and Extract Liquibase CLI
         run: |
-          # Ensure clean workspace
-          rm -rf liquibase-cli liquibase.tar.gz
+          set -e
           mkdir -p liquibase-cli
-          
-          # Download and extract Liquibase CLI
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
+          curl -L -o liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz
           tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=1
-          
-          # Make Liquibase executable
-          chmod +x liquibase-cli/bin/liquibase
-          
-          # Cleanup
-          rm -f liquibase.tar.gz
+          chmod +x liquibase-cli/liquibase
+          rm liquibase.tar.gz
 
-      - name: Set Liquibase Command (first-time dry run or real update)
-        id: check-history
+      - name: Detect First Commit
+        id: detect
         run: |
-          if git rev-list --count HEAD | grep -q '^1$'; then
-            echo "cmd=updateSql" >> $GITHUB_OUTPUT
+          if [ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]; then
+            echo "cmd=updateSql && liquibase-cli/liquibase changelogSync" >> $GITHUB_OUTPUT
           else
             echo "cmd=update" >> $GITHUB_OUTPUT
           fi
 
       - name: Run Liquibase
         run: |
-          ./liquibase-cli/bin/liquibase \
-            --defaultsFile=liquibase.properties \
-            ${{ steps.check-history.outputs.cmd }}
-        env:
-          LIQUIBASE_COMMAND_USERNAME: ${{ secrets.SF_USER }}
-          LIQUIBASE_COMMAND_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_URL: ${{ secrets.SF_URL }}
-          SF_ROLE: ${{ secrets.SF_ROLE }}
-          SF_WAREHOUSE: ${{ secrets.SF_WAREHOUSE }}
-          SF_DATABASE: ${{ secrets.SF_DATABASE }}
-          SF_SCHEMA: ${{ secrets.SF_SCHEMA }}
+          echo "Running Liquibase Command: ${{ steps.detect.outputs.cmd }}"
+          if [[ "${{ steps.detect.outputs.cmd }}" == updateSql* ]]; then
+            liquibase-cli/liquibase updateSql
+            liquibase-cli/liquibase changelogSync
+          else
+            liquibase-cli/liquibase update
+          fi
