@@ -1,4 +1,4 @@
-name: 🚀 Deploy to Snowflake using Liquibase
+name: 🚀 Liquibase Snowflake Deploy
 
 on:
   push:
@@ -18,35 +18,34 @@ jobs:
 
     steps:
       - name: 📥 Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: ☕ Setup Java 17
+      - name: ☕ Set up Java 17
         uses: actions/setup-java@v3
         with:
-          java-version: 17
-          distribution: temurin
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: 📦 Download and extract Liquibase CLI
+      - name: 📦 Install Liquibase CLI
         run: |
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
-          mkdir liquibase-cli
-          tar -xzf liquibase.tar.gz -C liquibase-cli
+          mkdir -p liquibase-cli
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
+            | tar xz -C liquibase-cli --strip-components=1
           chmod +x liquibase-cli/liquibase
 
-      - name: 🔧 Replace variables in liquibase.properties
+      - name: 🔧 Replace secrets in liquibase.properties
         run: |
-          sed -i "s/__SNOWFLAKE_ACCOUNT__/$SNOWFLAKE_ACCOUNT/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_WAREHOUSE__/$SNOWFLAKE_WAREHOUSE/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_ROLE__/$SNOWFLAKE_ROLE/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_USERNAME__/$SNOWFLAKE_USERNAME/g" liquibase.properties
-          sed -i "s/__SNOWFLAKE_PASSWORD__/$SNOWFLAKE_PASSWORD/g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ACCOUNT__|$SNOWFLAKE_ACCOUNT|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_WAREHOUSE__|$SNOWFLAKE_WAREHOUSE|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_ROLE__|$SNOWFLAKE_ROLE|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_USERNAME__|$SNOWFLAKE_USERNAME|g" liquibase.properties
+          sed -i "s|__SNOWFLAKE_PASSWORD__|$SNOWFLAKE_PASSWORD|g" liquibase.properties
 
-      - name: ⚙️ Run Liquibase - First time or update
+      - name: 🚀 Run Liquibase
         run: |
           if [ ! -f ".liquibase-synced" ]; then
             echo "🧪 First-time run: dry-run + changelogSync"
-            cd liquibase-cli
-            ./liquibase --defaultsFile=../liquibase.properties updateSql
+            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties updateSql
             ./liquibase --defaultsFile=../liquibase.properties changelogSync
             cd ..
             touch .liquibase-synced
@@ -58,6 +57,5 @@ jobs:
             git push
           else
             echo "🚀 Subsequent run: running liquibase update"
-            cd liquibase-cli
-            ./liquibase --defaultsFile=../liquibase.properties update
+            cd liquibase-cli && ./liquibase --defaultsFile=../liquibase.properties update
           fi
