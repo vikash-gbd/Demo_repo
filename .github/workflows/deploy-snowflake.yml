@@ -19,29 +19,36 @@ jobs:
       SF_SCHEMA:     ${{ secrets.SF_SCHEMA }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Download & extract Liquibase CLI
+      - name: Download & Extract Liquibase CLI
         run: |
           rm -rf liquibase-cli liquibase.tar.gz
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
             -o liquibase.tar.gz
 
           mkdir -p liquibase-cli
-          # Strip top two folders so `liquibase` script lands at liquibase-cli/liquibase
-          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=2 liquibase-4.24.0/liquibase
+
+          if tar -tf liquibase.tar.gz | grep -q 'liquibase-4.24.0/bin/liquibase'; then
+            tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=2 liquibase-4.24.0/bin
+          elif tar -tf liquibase.tar.gz | grep -q 'liquibase-4.24.0/liquibase/liquibase'; then
+            tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=2 liquibase-4.24.0/liquibase
+          else
+            echo "❌ Liquibase binary not found in archive!"
+            exit 1
+          fi
 
           chmod +x liquibase-cli/liquibase
           rm liquibase.tar.gz
 
-      - name: Decide dry-run vs. real update
+      - name: Decide Dry‑Run or Update
         id: choose
         run: |
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
@@ -52,5 +59,5 @@ jobs:
 
       - name: Run Liquibase
         run: |
-          echo "Running pipeline command: ${{ steps.choose.outputs.cmd }}"
+          echo "Running Liquibase command: ${{ steps.choose.outputs.cmd }}"
           eval "./liquibase-cli/liquibase --defaultsFile=liquibase.properties ${{ steps.choose.outputs.cmd }}"
