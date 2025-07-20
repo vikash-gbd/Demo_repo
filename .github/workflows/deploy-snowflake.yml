@@ -28,27 +28,19 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Download & Extract Liquibase CLI
+      - name: Download & extract Liquibase CLI
         run: |
           rm -rf liquibase-cli liquibase.tar.gz
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz \
-            -o liquibase.tar.gz
-
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.24.0/liquibase-4.24.0.tar.gz -o liquibase.tar.gz
           mkdir -p liquibase-cli
 
-          if tar -tf liquibase.tar.gz | grep -q 'liquibase-4.24.0/bin/liquibase'; then
-            tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=2 liquibase-4.24.0/bin
-          elif tar -tf liquibase.tar.gz | grep -q 'liquibase-4.24.0/liquibase/liquibase'; then
-            tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=2 liquibase-4.24.0/liquibase
-          else
-            echo "❌ Liquibase binary not found in archive!"
-            exit 1
-          fi
+          # <-- REPLACE Below once we know actual path -->
+          tar -xzf liquibase.tar.gz -C liquibase-cli --strip-components=__STRIP__ PATH/TO/liquibase
 
           chmod +x liquibase-cli/liquibase
           rm liquibase.tar.gz
 
-      - name: Decide Dry‑Run or Update
+      - name: Decide dry-run vs. update
         id: choose
         run: |
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
@@ -59,5 +51,5 @@ jobs:
 
       - name: Run Liquibase
         run: |
-          echo "Running Liquibase command: ${{ steps.choose.outputs.cmd }}"
+          echo "Executing: ${{ steps.choose.outputs.cmd }}"
           eval "./liquibase-cli/liquibase --defaultsFile=liquibase.properties ${{ steps.choose.outputs.cmd }}"
